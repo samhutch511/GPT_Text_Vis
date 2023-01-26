@@ -5,4 +5,4 @@ I think language models' ability to generate text is less interesting than the s
 
 This visualizer is built with Python and PyQT6 and requires PyTorch and Transformers.
 
-![example](/example.jpg "Example Prediction")
+![example](/example.jpeg "Example Prediction")
