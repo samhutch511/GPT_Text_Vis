@@ -37,10 +37,13 @@ class MainWindow(QWidget):
         self.scrollLayout.setVerticalSpacing(5)
         self.scrollLayout.setHorizontalSpacing(0)
         
-        #Define text input box
+        #Define text input boxes
         self.inputText = QTextEdit()
         self.inputText.setPlaceholderText("Enter your text")
-        self.inputText.setFixedSize(550, 50)
+        self.inputText.setFixedSize(550, 40)
+        self.howMany = QTextEdit()
+        self.howMany.setPlaceholderText("Add how many tokens?")
+        self.howMany.setFixedSize(550, 25)
         
         #Define button that sets it all off
         self.getText = QPushButton("Process Text")
@@ -49,7 +52,7 @@ class MainWindow(QWidget):
         #Define summary label
         self.label = QTextEdit()
         self.label.setReadOnly(True)
-        self.label.setFixedSize(550, 50)
+        self.label.setFixedSize(550, 40)
         
         #Define place for figure
         self.graph = QLabel()
@@ -59,10 +62,11 @@ class MainWindow(QWidget):
         #Add widgets to layout
         self.main_layout = QGridLayout()
         self.main_layout.addWidget(self.inputText, 0, 0, 1, 1)
-        self.main_layout.addWidget(self.getText, 1, 0, 1, 1)
-        self.main_layout.addWidget(self.label, 2, 0, 1, 1)
-        self.main_layout.addWidget(self.graph, 3, 0, 1, 1)
-        self.main_layout.addWidget(self.buttonArea, 0, 1, 4, 1)
+        self.main_layout.addWidget(self.howMany, 1, 0, 1, 1)
+        self.main_layout.addWidget(self.getText, 2, 0, 1, 1)
+        self.main_layout.addWidget(self.label, 3, 0, 1, 1)
+        self.main_layout.addWidget(self.graph, 4, 0, 1, 1)
+        self.main_layout.addWidget(self.buttonArea, 0, 1, 5, 1)
         self.setLayout(self.main_layout)
         
         #Define modeling tools
@@ -90,6 +94,8 @@ class MainWindow(QWidget):
             but.setAlignment(Qt.AlignmentFlag.AlignCenter)
             but.setMaximumHeight(20)
             but.setMinimumHeight(20)
+            but.setMaximumWidth(140)
+            but.setMinimumWidth(140)
             
             if i != 0:
                 #Normalize surprisals and attach to colormap, color buttons accordingly
@@ -106,6 +112,17 @@ class MainWindow(QWidget):
             x = (i // 5)
             y = (i % 5) + 10
             self.scrollLayout.addWidget(self.buttons[i], x, y)
+            
+        if i < 137:
+            for j in range(i + 1, 137):
+                blank = QLabel()
+                blank.setMaximumHeight(20)
+                blank.setMinimumHeight(20)
+                blank.setMaximumWidth(140)
+                blank.setMinimumWidth(140)
+                x = (j // 5)
+                y = (j % 5) + 10
+                self.scrollLayout.addWidget(blank, x, y)
             
         #Apply changes to buttons
         self.scrollWidget.setLayout(self.scrollLayout)
@@ -155,12 +172,26 @@ class MainWindow(QWidget):
     def displayText(self):
         
         #Process text
+        num = int(self.howMany.toPlainText())
         text = self.inputText.toPlainText()
-        self.tokens = self.get_tokens(text)
-        self.probs = self.get_probs(self.tokens[1])
-        self.surprisals = self.get_surprisals(self.probs, self.tokens[1])
         
+        if num == 0:
+            self.tokens = self.get_tokens(text)
+            self.probs = self.get_probs(self.tokens[1])
+            self.surprisals = self.get_surprisals(self.probs, self.tokens[1])
+        else:
+            for i in range(num + 1):
+                self.tokens = self.get_tokens(text)
+                self.probs = self.get_probs(self.tokens[1])
+                self.surprisals = self.get_surprisals(self.probs, self.tokens[1])
+                
+                dist = self.probs[-1]
+                choose=np.random.choice([i for i in range(len(dist))], 1, p=dist)
+                next_token = str(self.tokenizer.decode(choose[0]))
+                text = text + next_token
+                
         self.addButtons(num=len(self.tokens[0]), labels=self.tokens[0])
+
         
     def labelHover(self):
         self.label.setText('Test')
