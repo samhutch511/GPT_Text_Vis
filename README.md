@@ -9,4 +9,4 @@ This visualizer is built with Python and PyQt6 and requires PyTorch and Transfor
 
 Also, you can visualize the attention (either averaged or by attention head):
 
-![example2](/attention_example.jpeg "Example Attention")
+![example2](/attention_exmaple.jpeg "Example Attention")
