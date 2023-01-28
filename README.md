@@ -6,3 +6,7 @@ I think language models' ability to generate text is less interesting than the s
 This visualizer is built with Python and PyQt6 and requires PyTorch and Transformers.
 
 ![example](/example.jpeg "Example Prediction")
+
+Also, you can visualize the attention (either averaged or by attention head):
+
+![example2](/attention_example.jpeg "Example Attention")
