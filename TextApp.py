@@ -6,7 +6,7 @@ import sys
 import time
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
-from PyQt6.QtWidgets import QApplication, QPushButton, QGridLayout, QWidget, QLabel, QTextEdit, QScrollArea, QVBoxLayout
+from PyQt6.QtWidgets import *
 
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, AutoTokenizer, AutoModelForSequenceClassification
 import torch
@@ -30,12 +30,34 @@ class MainWindow(QWidget):
         
         #Define ScrollArea and ScrollWidget to add buttons on later
         self.buttonArea = QScrollArea()
-        self.buttonArea.setFixedSize(750, 700)
+        self.buttonArea.setFixedSize(800, 650)
         self.buttonArea.setWidgetResizable(True)
         self.scrollWidget = QWidget()
         self.scrollLayout = QGridLayout()
         self.scrollLayout.setVerticalSpacing(5)
         self.scrollLayout.setHorizontalSpacing(0)
+        
+        #Define attention buttons and spinbox
+        self.btngrp1 = QButtonGroup()
+        self.btngrp1.setExclusive(False)
+        self.attentionButton = QRadioButton("Attention View")
+        self.attention = False
+        self.attentionButton.toggled.connect(self.attentionToggle)
+        self.btngrp1.addButton(self.attentionButton)
+        
+        self.btngrp2 = QButtonGroup()
+        self.btngrp2.setExclusive(False)
+        self.meanAttButt = QRadioButton("Display Mean Attention")
+        self.meanAttButt.toggled.connect(self.meanAttToggle)
+        self.meanAtt = False
+        self.btngrp2.addButton(self.meanAttButt)
+        
+        self.headLabel = QLabel("Attention Head:")
+        self.headLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.attentionHead = QSpinBox()
+        self.attentionHead.valueChanged.connect(self.attentionToggle)
+        self.attentionHead.setMinimum(0)
+        self.attentionHead.setMaximum(19)
         
         #Define text input boxes
         self.inputText = QTextEdit()
@@ -66,67 +88,165 @@ class MainWindow(QWidget):
         self.main_layout.addWidget(self.getText, 2, 0, 1, 1)
         self.main_layout.addWidget(self.label, 3, 0, 1, 1)
         self.main_layout.addWidget(self.graph, 4, 0, 1, 1)
-        self.main_layout.addWidget(self.buttonArea, 0, 1, 5, 1)
+        self.main_layout.addWidget(self.buttonArea, 1, 2, 4, 4)
+        self.main_layout.addWidget(self.attentionButton, 0, 2, 1, 1)
+        self.main_layout.addWidget(self.meanAttButt, 0, 3, 1, 1)
+        self.main_layout.addWidget(self.headLabel, 0, 4, 1, 1)
+        self.main_layout.addWidget(self.attentionHead, 0, 5, 1, 1)
         self.setLayout(self.main_layout)
         
         #Define modeling tools
         self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2-large')
-        self.model = GPT2LMHeadModel.from_pretrained('gpt2-large')
+        self.model = GPT2LMHeadModel.from_pretrained('gpt2-large', output_attentions=True)
         self.tokens = []
         self.probs = []
         self.surprisals = []
+        self.attentionHeads = None
+        self.meanAttention = None
+    
+    def meanAttToggle(self):
+        if self.meanAttButt.isChecked():
+            self.meanAtt = True
+            if self.tokens != []:
+                self.addButtons(num=len(self.tokens[0]), labels=self.tokens[0])
+        else:
+            self.meanAtt = False
+            if self.tokens != []:
+                self.addButtons(num=len(self.tokens[0]), labels=self.tokens[0])
             
+    def attentionToggle(self):
+        if self.attentionButton.isChecked():
+            self.attention = True
+            if self.tokens != []:
+                self.addButtons(num=len(self.tokens[0]), labels=self.tokens[0])
+        else:
+            self.attention = False
+            if self.tokens != []:
+                self.addButtons(num=len(self.tokens[0]), labels=self.tokens[0])
     
     def addButtons(self, num, labels=None):
         
-        #Remove old buttons
-        if len(self.buttons) != 0:
-            for b in self.buttons:
-                self.scrollLayout.removeWidget(b)
-        self.buttons = []
-        
-        #Add new buttons
-        if labels == None:
-            labels = list(range(num))
+        if self.attention:
+            head = int(self.attentionHead.value())
+            att = self.attentionHeads[head]
             
-        for i in range(num):
-            but = QLabel(labels[i])
-            but.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            but.setMaximumHeight(20)
-            but.setMinimumHeight(20)
-            but.setMaximumWidth(140)
-            but.setMinimumWidth(140)
+            if self.meanAtt:
+                att = self.meanAttention
             
-            if i != 0:
-                #Normalize surprisals and attach to colormap, color buttons accordingly
-                norm = matplotlib.colors.Normalize(vmin=min(self.surprisals), vmax=max(self.surprisals))
-                cmap = matplotlib.cm.get_cmap('Wistia')
-                color = QColor(int(255*cmap(norm(self.surprisals)[i - 1])[0]), int(255*cmap(norm(self.surprisals)[i - 1])[1]), int(255*cmap(norm(self.surprisals)[i - 1])[2]), int(255*cmap(norm(self.surprisals)[i - 1])[3]))
+            #Remove old buttons
+            if len(self.buttons) != 0:
+                for b in self.buttons:
+                    self.scrollLayout.removeWidget(b)
+            self.buttons = []
+
+            #Add new buttons
+            if labels == None:
+                labels = list(range(num))
+
+            for i in range(num):
+                but = QLabel(labels[i])
+                but.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                but.setMaximumHeight(20)
+                but.setMinimumHeight(20)
+                but.setMaximumWidth(140)
+                but.setMinimumWidth(140)
+
+                #Normalize attention and attach to colormap, color buttons accordingly
+                pos = 0
+                cmap = matplotlib.cm.get_cmap('cool')
+                
+                color = QColor(int(255*cmap(att[pos].tolist()[i])[0]), int(255*cmap(att[pos].tolist()[i])[1]), int(255*cmap(att[pos].tolist()[i])[2]), int(255*cmap(att[pos].tolist()[i])[3]))
                 but.setStyleSheet("background-color: {}".format(color.name()))
+
+                but.enterEvent = self.plot
+                but.setObjectName(str(i))
+                self.buttons.append(but)
+
+            for i in range(len(self.buttons)):
+                x = (i // 5)
+                y = (i % 5) + 10
+                self.scrollLayout.addWidget(self.buttons[i], x, y)
+
+            if i < 137:
+                for j in range(i + 1, 137):
+                    blank = QLabel()
+                    blank.setMaximumHeight(20)
+                    blank.setMinimumHeight(20)
+                    blank.setMaximumWidth(140)
+                    blank.setMinimumWidth(140)
+                    x = (j // 5)
+                    y = (j % 5) + 10
+                    self.scrollLayout.addWidget(blank, x, y)
+
+            #Apply changes to buttons
+            self.scrollWidget.setLayout(self.scrollLayout)
+            self.buttonArea.setWidget(self.scrollWidget)
             
-            but.enterEvent = self.plot
-            but.setObjectName(str(i))
-            self.buttons.append(but)
+        
+        else:
+        
+            #Remove old buttons
+            if len(self.buttons) != 0:
+                for b in self.buttons:
+                    self.scrollLayout.removeWidget(b)
+            self.buttons = []
+
+            #Add new buttons
+            if labels == None:
+                labels = list(range(num))
+
+            for i in range(num):
+                but = QLabel(labels[i])
+                but.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                but.setMaximumHeight(20)
+                but.setMinimumHeight(20)
+                but.setMaximumWidth(140)
+                but.setMinimumWidth(140)
+
+                if i != 0:
+                    #Normalize surprisals and attach to colormap, color buttons accordingly
+                    norm = matplotlib.colors.Normalize(vmin=min(self.surprisals), vmax=max(self.surprisals))
+                    cmap = matplotlib.cm.get_cmap('Wistia')
+                    color = QColor(int(255*cmap(norm(self.surprisals)[i - 1])[0]), int(255*cmap(norm(self.surprisals)[i - 1])[1]), int(255*cmap(norm(self.surprisals)[i - 1])[2]), int(255*cmap(norm(self.surprisals)[i - 1])[3]))
+                    but.setStyleSheet("background-color: {}".format(color.name()))
+
+                but.enterEvent = self.plot
+                but.setObjectName(str(i))
+                self.buttons.append(but)
+
+            for i in range(len(self.buttons)):
+                x = (i // 5)
+                y = (i % 5) + 10
+                self.scrollLayout.addWidget(self.buttons[i], x, y)
+
+            if i < 137:
+                for j in range(i + 1, 137):
+                    blank = QLabel()
+                    blank.setMaximumHeight(20)
+                    blank.setMinimumHeight(20)
+                    blank.setMaximumWidth(140)
+                    blank.setMinimumWidth(140)
+                    x = (j // 5)
+                    y = (j % 5) + 10
+                    self.scrollLayout.addWidget(blank, x, y)
+
+            #Apply changes to buttons
+            self.scrollWidget.setLayout(self.scrollLayout)
+            self.buttonArea.setWidget(self.scrollWidget)
             
+    def attentionRecolor(self, pos):
+        head = int(self.attentionHead.value())
+        att = self.attentionHeads[head]
+        if self.meanAtt:
+                att = self.meanAttention
         for i in range(len(self.buttons)):
-            x = (i // 5)
-            y = (i % 5) + 10
-            self.scrollLayout.addWidget(self.buttons[i], x, y)
-            
-        if i < 137:
-            for j in range(i + 1, 137):
-                blank = QLabel()
-                blank.setMaximumHeight(20)
-                blank.setMinimumHeight(20)
-                blank.setMaximumWidth(140)
-                blank.setMinimumWidth(140)
-                x = (j // 5)
-                y = (j % 5) + 10
-                self.scrollLayout.addWidget(blank, x, y)
-            
-        #Apply changes to buttons
-        self.scrollWidget.setLayout(self.scrollLayout)
-        self.buttonArea.setWidget(self.scrollWidget)
+            b = self.buttons[i]
+            cmap = matplotlib.cm.get_cmap('cool')
+            color = QColor(int(255*cmap(att[pos].tolist()[i])[0]), int(255*cmap(att[pos].tolist()[i])[1]), int(255*cmap(att[pos].tolist()[i])[2]), int(255*cmap(att[pos].tolist()[i])[3]))
+            if b.underMouse():
+                (f"border: 2px solid black; background-color: {color.name()};")
+            else:
+                b.setStyleSheet("background-color:" + color.name() +";")
 
     def plot(self, event):
         for b in self.buttons:
@@ -134,6 +254,8 @@ class MainWindow(QWidget):
                 num = int(b.objectName())
                 color = b.palette().button().color()
                 b.setStyleSheet(f"border: 2px solid black; background-color: {color.name()};")
+                if self.attention:
+                    self.attentionRecolor(num)
             else:
                 color = b.palette().button().color()
                 b.setStyleSheet("background-color:" + color.name() +";")
@@ -172,18 +294,27 @@ class MainWindow(QWidget):
     def displayText(self):
         
         #Process text
-        num = int(self.howMany.toPlainText())
         text = self.inputText.toPlainText()
+        if self.howMany.toPlainText() == '':
+            num = 0
+        else:
+            num = int(self.howMany.toPlainText())
         
         if num == 0:
             self.tokens = self.get_tokens(text)
-            self.probs = self.get_probs(self.tokens[1])
+            outputs = self.getOutputs(self.tokens[1])
+            self.probs = self.get_probs(outputs)
             self.surprisals = self.get_surprisals(self.probs, self.tokens[1])
+            self.attentionHeads = outputs.attentions[-1][0]
+            self.meanAttention = self.attentionHeads.squeeze(0).mean(dim=0)
         else:
             for i in range(num + 1):
                 self.tokens = self.get_tokens(text)
-                self.probs = self.get_probs(self.tokens[1])
+                outputs = self.getOutputs(self.tokens[1])
+                self.probs = self.get_probs(outputs)
                 self.surprisals = self.get_surprisals(self.probs, self.tokens[1])
+                self.attentionHeads = outputs.attentions[-1][0]
+                self.meanAttention = self.attentionHeads.squeeze(0).mean(dim=0)
                 
                 dist = self.probs[-1]
                 choose=np.random.choice([i for i in range(len(dist))], 1, p=dist)
@@ -193,28 +324,28 @@ class MainWindow(QWidget):
         self.addButtons(num=len(self.tokens[0]), labels=self.tokens[0])
 
         
-    def labelHover(self):
-        self.label.setText('Test')
-        
     def get_tokens(self, text):
         tokens = self.tokenizer.encode(text)
         tokenized = [self.tokenizer.decode(t) for t in tokens]
         return (tokenized, tokens)
 
-    def get_probs(self, tokens):
-
-        #convert to tensor variable
-        tokens_tensor = torch.tensor([tokens])
-
-        #get predictions
-        with torch.no_grad():
-            outputs = self.model(tokens_tensor)
-        predictions = outputs[0]
+    def get_probs(self, outputs):
 
         #compile probability distribution outputs
+        predictions = outputs[0]
         probs_list = [torch.softmax(predictions[0][i],-1).data.numpy() for i in range(len(predictions[0]))]
 
         return probs_list
+    
+    def getOutputs(self, tokens):
+        #convert to tensor variable
+        tokens_tensor = torch.tensor([tokens])
+
+        #get outputs
+        with torch.no_grad():
+            outputs = self.model(tokens_tensor)
+            
+        return outputs
 
     def get_surprisals(self, probs, tokens):
         surprisals = []
