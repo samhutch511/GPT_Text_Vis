@@ -58,6 +58,7 @@ class MainWindow(QWidget):
         self.attentionHead.valueChanged.connect(self.attentionToggle)
         self.attentionHead.setMinimum(0)
         self.attentionHead.setMaximum(19)
+        self.selected = 0
         
         #Define text input boxes
         self.inputText = QTextEdit()
@@ -109,16 +110,19 @@ class MainWindow(QWidget):
             self.meanAtt = True
             if self.tokens != []:
                 self.addButtons(num=len(self.tokens[0]), labels=self.tokens[0])
+                self.plotAttention(self.selected)
         else:
             self.meanAtt = False
             if self.tokens != []:
                 self.addButtons(num=len(self.tokens[0]), labels=self.tokens[0])
+                self.plotAttention(self.selected)
             
     def attentionToggle(self):
         if self.attentionButton.isChecked():
             self.attention = True
             if self.tokens != []:
                 self.addButtons(num=len(self.tokens[0]), labels=self.tokens[0])
+                self.plotAttention(self.selected)
         else:
             self.attention = False
             if self.tokens != []:
@@ -152,11 +156,18 @@ class MainWindow(QWidget):
                 but.setMinimumWidth(140)
 
                 #Normalize attention and attach to colormap, color buttons accordingly
-                pos = 0
+                pos = self.selected
                 cmap = matplotlib.cm.get_cmap('cool')
                 
                 color = QColor(int(255*cmap(att[pos].tolist()[i])[0]), int(255*cmap(att[pos].tolist()[i])[1]), int(255*cmap(att[pos].tolist()[i])[2]), int(255*cmap(att[pos].tolist()[i])[3]))
-                but.setStyleSheet("background-color: {}".format(color.name()))
+                
+                if i == pos:
+                    but.setStyleSheet(f"border: 2px solid black; background-color: {color.name()};")
+                else:
+                    but.setStyleSheet("background-color: {}".format(color.name()))
+                
+                if att[pos].tolist()[i] == 0.0:
+                    but.setStyleSheet("")
 
                 but.enterEvent = self.plot
                 but.setObjectName(str(i))
@@ -235,23 +246,32 @@ class MainWindow(QWidget):
             self.buttonArea.setWidget(self.scrollWidget)
             
     def attentionRecolor(self, pos):
+        
         head = int(self.attentionHead.value())
         att = self.attentionHeads[head]
+        
         if self.meanAtt:
                 att = self.meanAttention
+                
         for i in range(len(self.buttons)):
+            
             b = self.buttons[i]
             cmap = matplotlib.cm.get_cmap('cool')
             color = QColor(int(255*cmap(att[pos].tolist()[i])[0]), int(255*cmap(att[pos].tolist()[i])[1]), int(255*cmap(att[pos].tolist()[i])[2]), int(255*cmap(att[pos].tolist()[i])[3]))
+            
             if b.underMouse():
-                (f"border: 2px solid black; background-color: {color.name()};")
+                b.setStyleSheet(f"border: 2px solid black; background-color: {color.name()};")
             else:
                 b.setStyleSheet("background-color:" + color.name() +";")
+                
+            if att[pos].tolist()[i] == 0.0:
+                b.setStyleSheet("")
 
     def plot(self, event):
         for b in self.buttons:
             if b.underMouse():
                 num = int(b.objectName())
+                self.selected = num
                 color = b.palette().button().color()
                 b.setStyleSheet(f"border: 2px solid black; background-color: {color.name()};")
                 if self.attention:
@@ -259,37 +279,43 @@ class MainWindow(QWidget):
             else:
                 color = b.palette().button().color()
                 b.setStyleSheet("background-color:" + color.name() +";")
+                
+        if self.attention:
+            
+            self.plotAttention(num)
         
-        #Display summary stats
-        if num != 0:
-            self.label.setText(f"Surprisal: {self.surprisals[num - 1]}\nPrediction Entropy: {stats.entropy(self.probs[num])}")
         else:
-            self.label.setText(f"Surprisal: NA\nPrediction Entropy: {stats.entropy(self.probs[num])}")
         
-        #Display next predictions
-        probs = self.probs[num]
-        dic = {}
-        for i in range(len(probs)):
-            dic[probs[i]] = self.tokenizer.decode(i)
-        items = list(dic.items())
-        items.sort(reverse=True)
-        top = items[0:10]
-        top_dict = dict(top)
-        
-        fig, ax = plt.subplots(figsize = (10, 10))
-        ax.bar(list(top_dict.values()), list(top_dict.keys()), 0.75)
-        plt.xticks(rotation=45, ha="right")
-        plt.xticks(fontsize=10)
-        xlabel = "Top 10 Most Probable Next Tokens"
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel('Probability')
-        ax.set_yticks(np.arange(0, 1.1, 0.1))
-        ax.set_title(f"Predicted Token After \'{self.tokens[0][num]}\':")
-        plt.savefig('./graphs/fig.jpg')
-        plt.close(fig)
-        
-        pixmap = QPixmap('./graphs/fig.jpg')
-        self.graph.setPixmap(pixmap)
+            #Display summary stats
+            if num != 0:
+                self.label.setText(f"Surprisal: {self.surprisals[num - 1]}\nPrediction Entropy: {stats.entropy(self.probs[num])}")
+            else:
+                self.label.setText(f"Surprisal: NA\nPrediction Entropy: {stats.entropy(self.probs[num])}")
+
+            #Display next predictions
+            probs = self.probs[num]
+            dic = {}
+            for i in range(len(probs)):
+                dic[probs[i]] = self.tokenizer.decode(i)
+            items = list(dic.items())
+            items.sort(reverse=True)
+            top = items[0:10]
+            top_dict = dict(top)
+
+            fig, ax = plt.subplots(figsize = (10, 10))
+            ax.bar(list(top_dict.values()), list(top_dict.keys()), 0.75)
+            plt.xticks(rotation=45, ha="right")
+            plt.xticks(fontsize=10)
+            xlabel = "Top 10 Most Probable Next Tokens"
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel('Probability')
+            ax.set_yticks(np.arange(0, 1.1, 0.1))
+            ax.set_title(f"Predicted Token After \'{self.tokens[0][num]}\':")
+            plt.savefig('./graphs/fig.jpg')
+            plt.close(fig)
+
+            pixmap = QPixmap('./graphs/fig.jpg')
+            self.graph.setPixmap(pixmap)
         
     def displayText(self):
         
@@ -354,6 +380,35 @@ class MainWindow(QWidget):
             prob = probs[i][token]
             surprisals.append(-1 * log(prob, 10))
         return surprisals
+    
+    def plotAttention(self, num):
+        
+        head = int(self.attentionHead.value())
+        att = self.attentionHeads[head]
+
+        if self.meanAtt:
+                att = self.meanAttention
+
+        original = att[num].tolist()
+        drop = [i for i in original if i != 0.0]
+        sort = sorted(drop, reverse=True)[:10]
+        dic = {}
+        for s in sort:
+            dic[s] = self.tokens[0][original.index(s)]
+
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.bar(list(dic.values()), list(dic.keys()), 0.75, color='r')
+        plt.xticks(rotation=45, ha="right")
+        plt.xticks(fontsize=10)
+        xlabel = "Top 10 Most Attended Tokens"
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel('Attention')
+        ax.set_yticks(np.arange(0, 1.1, 0.1))
+        ax.set_title(f"Attention for \'{self.tokens[0][num]}\':")
+        plt.savefig('./graphs/fig.jpg')
+        plt.close(fig)
+        pixmap = QPixmap('./graphs/fig.jpg')
+        self.graph.setPixmap(pixmap)
         
 
 if __name__ == "__main__":
